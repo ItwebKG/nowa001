@@ -12,7 +12,7 @@ function winBackgroundMaterial() {
   return undefined;
 }
 
-const DEFAULT_BASE_URL = "https://itwebkg-kurutweb-f5c5.twc1.net";
+const DEFAULT_BASE_URL = "https://itwebkg-nowa001-b8a4.twc1.net";
 
 let store = null;
 /** @type {import("electron").BrowserWindow | null} */
@@ -885,7 +885,7 @@ ipcMain.handle("update-user", async (_event, { id, payload } = {}) => {
 function createWindow() {
   const material = winBackgroundMaterial();
   const win = new BrowserWindow({
-    title: "Kurut Desktop",
+    title: "Нова Инвест Desktop",
     width: 1280,
     height: 800,
     minWidth: 900,
@@ -919,7 +919,7 @@ function createWindow() {
 app.whenReady().then(() => {
   if (process.platform === "win32" && process.arch !== "x64") {
     dialog.showErrorBox(
-      "Kurut Desktop",
+      "Нова Инвест Desktop",
       "Эта сборка рассчитана на Windows 64-bit (x64).\nСкачайте установщик с пометкой win-x64."
     );
     app.quit();

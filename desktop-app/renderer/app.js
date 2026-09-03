@@ -2400,7 +2400,7 @@ async function runDesktopUpdateCheck(options = {}) {
       }
       if (settingsUpdateResult) {
         setHidden(settingsUpdateResult, false);
-        settingsUpdateResult.innerHTML = `<strong>Рекомендуется обновление.</strong> После установки нажмите «Перезапустить приложение» или закройте Kurut Desktop и откройте снова.`;
+        settingsUpdateResult.innerHTML = `<strong>Рекомендуется обновление.</strong> После установки нажмите «Перезапустить приложение» или закройте Нова Инвест Desktop и откройте снова.`;
       }
       if (notes.length && settingsUpdateNotes) {
         settingsUpdateNotes.innerHTML = notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("");
@@ -2526,7 +2526,7 @@ if (settingsOpenDownloadBtn) {
 if (settingsRelaunchAppBtn) {
   settingsRelaunchAppBtn.addEventListener("click", () => {
     window.desktopApi.relaunchApp().catch(() => {
-      toast("Перезапуск", "Закройте Kurut Desktop и откройте снова вручную.", "default");
+      toast("Перезапуск", "Закройте Нова Инвест Desktop и откройте снова вручную.", "default");
     });
   });
 }

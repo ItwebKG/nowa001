@@ -12,7 +12,7 @@ require("dotenv").config();
 
 const app = express();
 const port = process.env.PORT || 5000;
-const publicDomain = process.env.PUBLIC_DOMAIN || "https://itwebkg-kurutweb-f5c5.twc1.net";
+const publicDomain = process.env.PUBLIC_DOMAIN || "https://itwebkg-nowa001-b8a4.twc1.net";
 const jwtSecret = process.env.JWT_SECRET || "your_jwt_secret_123";
 
 // Valid roles for validation22
@@ -38,9 +38,9 @@ const smtpSecure = String(process.env.SMTP_SECURE || process.env.SMTP_SECUR || "
 const smtpUsername = String(process.env.SMTP_USERNAME || process.env.SMTP_USER || process.env.GMAIL_USER || "").trim();
 const smtpPassword = String(process.env.SMTP_PASSWORD || process.env.GMAIL_APP_PASSWORD || "").replace(/\s+/g, "");
 const smtpFromEmail = String(process.env.SMTP_FROM_EMAIL || smtpUsername || "").trim();
-const smtpFromName = String(process.env.SMTP_FROM_NAME || "Kurut Security").trim();
+const smtpFromName = String(process.env.SMTP_FROM_NAME || "Нова Инвест").trim();
 const resendApiKey = String(process.env.RESEND_API_KEY || "").trim();
-const resendFrom = String(process.env.RESEND_FROM || "").trim() || "Kurut Security <onboarding@resend.dev>";
+const resendFrom = String(process.env.RESEND_FROM || "").trim() || "Нова Инвест <onboarding@resend.dev>";
 const passwordResetReturnLink =
   String(process.env.PASSWORD_RESET_RETURN_LINK || "true").trim().toLowerCase() === "true";
 
@@ -120,7 +120,7 @@ function buildPasswordResetEmail({ fullName, resetLink }) {
         radial-gradient(circle at 0% 100%,rgba(34,211,238,.16),transparent 45%),
         linear-gradient(180deg,rgba(24,24,27,.92),rgba(9,9,11,.96));box-shadow:0 24px 80px -30px rgba(2,6,23,.9);">
         <div style="padding:30px 30px 16px;">
-          <div style="display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#c4b5fd;">Kurut Security</div>
+          <div style="display:inline-block;padding:6px 10px;border-radius:999px;border:1px solid rgba(255,255,255,.2);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#c4b5fd;">Нова Инвест</div>
           <h1 style="margin:14px 0 8px;font-size:28px;line-height:1.2;color:#fff;">Восстановление пароля</h1>
           <p style="margin:0;color:#cbd5e1;font-size:14px;">Здравствуйте, ${safeName}. Мы получили запрос на смену пароля.</p>
         </div>
@@ -141,27 +141,53 @@ function buildPasswordResetEmail({ fullName, resetLink }) {
 
 
 
-const corsOrigins = (process.env.FRONTEND_ORIGIN ||
-  "http://localhost:5173,http://127.0.0.1:5173,http://localhost:4173,https://kurutnet.online,https://itwebkg-kurutweb-f5c5.twc1.net"
-)
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+/** Заголовок Origin всегда без завершающего слэша и в нижнем регистре — приводим список к тому же виду. */
+function normalizeOrigin(value) {
+  return String(value || "").trim().replace(/\/+$/, "").toLowerCase();
+}
+
+const DEFAULT_FRONTEND_ORIGINS = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://localhost:4173",
+  "https://belekned.ru",
+  "https://www.belekned.ru",
+  "https://itwebkg-nowa001-b8a4.twc1.net",
+];
+
+const corsOrigins = [
+  ...new Set(
+    [
+      ...String(process.env.FRONTEND_ORIGIN || "").split(","),
+      ...DEFAULT_FRONTEND_ORIGINS,
+    ]
+      .map(normalizeOrigin)
+      .filter(Boolean)
+  ),
+];
+
+console.log("Разрешённые origin для CORS:", corsOrigins);
 
 const frontendResetBaseUrl =
   String(process.env.FRONTEND_RESET_URL || "").trim() ||
-  corsOrigins[0] ||
-  "http://localhost:5173";
+  "https://belekned.ru";
 
 app.use(
   cors({
     origin(origin, cb) {
-      const ok = !origin || corsOrigins.includes(origin);
-      cb(null, ok);
+      // Запросы без Origin (curl, серверные вызовы, same-origin) пропускаем как есть
+      if (!origin) return cb(null, true);
+
+      const ok = corsOrigins.includes(normalizeOrigin(origin));
+      if (!ok) {
+        console.warn("CORS: origin не разрешён —", origin);
+      }
+      return cb(null, ok);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -748,7 +774,7 @@ app.get("/api/message", (req, res) => {
 
 // Публичная проверка, что фронт попал на этот инстанс API (без авторизации)
 app.get("/public/dev/ping", (req, res) => {
-  res.json({ ok: true, service: "kurut-api", ts: Date.now() });
+  res.json({ ok: true, service: "nova-invest-api", ts: Date.now() });
 });
 
 // Публичный статус доступа к сайту (для баннера / гейта на фронте)
@@ -812,7 +838,7 @@ app.post("/public/password-reset/request", async (req, res) => {
         try {
           const sent = await sendMailSmart({
             to: user.email,
-            subject: "Kurut · Восстановление пароля",
+            subject: "Нова Инвест · Восстановление пароля",
             text: `Ссылка для восстановления пароля: ${resetLink} (действует 30 минут)`,
             html,
           });
@@ -1004,7 +1030,7 @@ app.post("/api/dev/mail/test", authenticate, async (req, res) => {
   }
 
   const to = String(req.body?.to ?? "").trim();
-  const subject = String(req.body?.subject ?? "Kurut test email").trim().slice(0, 255);
+  const subject = String(req.body?.subject ?? "Нова Инвест · тестовое письмо").trim().slice(0, 255);
   const text = String(req.body?.text ?? "Проверка SMTP: письмо отправлено успешно.").trim().slice(0, 5000);
 
   if (!to) {
@@ -1014,7 +1040,7 @@ app.post("/api/dev/mail/test", authenticate, async (req, res) => {
   try {
     const html = `
       <div style="font-family:Inter,Segoe UI,Arial,sans-serif;padding:20px;background:#0b1020;color:#e5e7eb;">
-        <h2 style="margin:0 0 8px;">Kurut · SMTP test</h2>
+        <h2 style="margin:0 0 8px;">Нова Инвест · SMTP test</h2>
         <p style="margin:0;">${text}</p>
       </div>
     `;
