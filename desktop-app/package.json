@@ -1,0 +1,66 @@
+{
+  "name": "kurut01-desktop",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "author": "Василий К",
+  "description": "Kurut Desktop — Windows 10/11, x64",
+  "scripts": {
+    "start": "electron .",
+    "pack": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir --win --x64",
+    "dist": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64 --publish never",
+    "dist:portable": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win portable --x64 --publish never",
+    "dist:dir": "cross-env CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --win --x64 --dir --publish never"
+  },
+  "dependencies": {
+    "electron-store": "^9.0.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^30.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.kurut.desktop",
+    "productName": "Kurut Desktop",
+    "copyright": "Copyright © Kurut",
+    "directories": {
+      "output": "dist"
+    },
+    "asar": true,
+    "files": [
+      "**/*",
+      "!dist",
+      "!dist/**/*",
+      "!*.md",
+      "!**/*.map"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-x64-setup.${ext}",
+      "legalTrademarks": "Kurut Desktop",
+      "signAndEditExecutable": false,
+      "signDlls": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Kurut Desktop",
+      "uninstallDisplayName": "Kurut Desktop",
+      "installerLanguages": ["ru_RU", "en_US"],
+      "language": "1049"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-win-x64-portable.${ext}"
+    }
+  }
+}
