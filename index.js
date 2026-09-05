@@ -1,4 +1,5 @@
 const express = require("express");
+const compression = require("compression");
 const cors = require("cors");
 const mysql = require("mysql2/promise");
 const bcrypt = require("bcrypt");
@@ -171,6 +172,10 @@ console.log("Разрешённые origin для CORS:", corsOrigins);
 const frontendResetBaseUrl =
   String(process.env.FRONTEND_RESET_URL || "").trim() ||
   "https://belekned.ru";
+
+// Ответы-списки (объекты, справочники) весят сотни килобайт JSON —
+// gzip режет их в 5-10 раз и заметно ускоряет мобильный интернет.
+app.use(compression());
 
 app.use(
   cors({
@@ -760,6 +765,10 @@ async function testDatabaseConnection() {
       `);
     }
 
+    // Индексы под списки: без них MySQL при каждом открытии раздела
+    // сортирует и фильтрует всю таблицу объектов целиком.
+    await ensureIndexes(connection);
+
     // Setup admin user
     const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
     const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
@@ -792,6 +801,38 @@ async function testDatabaseConnection() {
     }
   } finally {
     if (connection) connection.release();
+  }
+}
+
+/**
+ * Создаёт индекс, если его ещё нет: CREATE INDEX IF NOT EXISTS в MySQL
+ * не поддерживается, поэтому сверяемся с information_schema.
+ * Ошибку не пробрасываем — на хостинге у пользователя БД может не быть
+ * прав на ALTER, и приложение должно подняться в любом случае.
+ */
+async function ensureIndexes(connection) {
+  const indexes = [
+    // ORDER BY created_at DESC, id DESC — во всех списках объектов
+    ["properties", "idx_properties_created_at", "(created_at, id)"],
+    // WHERE curator_id = ? (роль риелтора и режим «Мои»)
+    ["properties", "idx_properties_curator_created", "(curator_id, created_at)"],
+    // Фильтры и сводки по статусу
+    ["properties", "idx_properties_status", "(status)"],
+  ];
+
+  for (const [table, name, definition] of indexes) {
+    try {
+      const [existing] = await connection.execute(
+        `SELECT 1 FROM information_schema.statistics
+         WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1`,
+        [table, name]
+      );
+      if (existing.length > 0) continue;
+      console.log(`Creating index ${name} on ${table}...`);
+      await connection.execute(`CREATE INDEX \`${name}\` ON \`${table}\` ${definition}`);
+    } catch (error) {
+      console.warn(`Не удалось создать индекс ${name}:`, error.sqlMessage || error.message);
+    }
   }
 }
 
@@ -2968,8 +3009,10 @@ app.get("/api/variants", authenticate, async (req, res) => {
         price: row.price,
         unit: row.unit || null,
         status: row.status,
-        owner_name: row.owner_name || null,
-        owner_phone: row.owner_phone || null,
+        // Пустые строки и пробелы в старых записях приводим к null,
+        // чтобы интерфейс не рисовал пустую строку собственника.
+        owner_name: (row.owner_name || "").trim() || null,
+        owner_phone: (row.owner_phone || "").trim() || null,
         curator_id: row.curator_id ?? null,
         curator_name: row.curator_name || null,
         type_id: row.type_id || null,
