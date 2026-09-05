@@ -197,32 +197,52 @@ app.use(express.json());
 
 // Multer Configuration
 const storage = multer.memoryStorage();
+
+// List of common image MIME types
+const allowedImageTypes = [
+  'image/jpeg',          // .jpg, .jpeg
+  'image/png',           // .png
+  'image/gif',           // .gif
+  'image/bmp',           // .bmp
+  'image/tiff',          // .tiff, .tif
+  'image/webp',          // .webp
+  'image/heic',          // .heic (iPhone HEIF format)
+  'image/heif',          // .heif
+  'image/svg+xml',       // .svg
+  'image/x-icon',        // .ico
+  'image/vnd.microsoft.icon', // .ico (alternate MIME type)
+  'image/jp2',           // .jp2 (JPEG 2000)
+  'image/avif'           // .avif
+];
+
+// Телефоны (особенно iOS с HEIC и часть Android-браузеров) присылают снимки
+// с mimetype application/octet-stream. Раньше такие файлы отклонялись,
+// и добавление объекта с фото падало — поэтому проверяем ещё и расширение.
+const allowedImageExtensions = [
+  '.jpg', '.jpeg', '.jpe', '.png', '.gif', '.bmp', '.tif', '.tiff',
+  '.webp', '.heic', '.heif', '.svg', '.ico', '.jp2', '.avif'
+];
+
+const GENERIC_MIME_TYPES = ['application/octet-stream', 'binary/octet-stream', '', undefined, null];
+
+function isAcceptableImage(file) {
+  if (allowedImageTypes.includes(file.mimetype)) return true;
+  const ext = path.extname(String(file.originalname || '')).toLowerCase();
+  if (!allowedImageExtensions.includes(ext)) return false;
+  // Расширение выручает только когда браузер не определил тип
+  return GENERIC_MIME_TYPES.includes(file.mimetype) || String(file.mimetype || '').startsWith('image/');
+}
+
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    // List of common image MIME types
-    const allowedImageTypes = [
-      'image/jpeg',          // .jpg, .jpeg
-      'image/png',           // .png
-      'image/gif',           // .gif
-      'image/bmp',           // .bmp
-      'image/tiff',          // .tiff, .tif
-      'image/webp',          // .webp
-      'image/heic',          // .heic (iPhone HEIF format)
-      'image/heif',          // .heif
-      'image/svg+xml',       // .svg
-      'image/x-icon',        // .ico
-      'image/vnd.microsoft.icon', // .ico (alternate MIME type)
-      'image/jp2',           // .jp2 (JPEG 2000)
-      'image/avif'           // .avif
-    ];
-
-    if (allowedImageTypes.includes(file.mimetype)) {
-      console.log(`File ${file.originalname} accepted for upload`);
+    if (isAcceptableImage(file)) {
       cb(null, true);
     } else {
       console.error(`File ${file.originalname} rejected: Invalid MIME type ${file.mimetype}`);
-      cb(new Error('Недопустимый формат файла. Разрешены только изображения (JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, HEIF, SVG, ICO, JP2, AVIF).'), false);
+      const err = new Error('Недопустимый формат файла. Разрешены только изображения (JPEG, PNG, GIF, BMP, TIFF, WebP, HEIC, HEIF, SVG, ICO, JP2, AVIF).');
+      err.status = 400;
+      cb(err, false);
     }
   },
   limits: { fileSize: 100 * 1024 * 1024 }, // Лимит 100 МБ
@@ -708,6 +728,16 @@ async function testDatabaseConnection() {
           FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE
         ) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci
       `);
+    } else {
+      // Миграция старых БД: таблица могла быть создана без уникального ключа,
+      // на который опирается INSERT IGNORE при отметке «прочитано».
+      try {
+        await connection.execute(
+          "ALTER TABLE notification_reads ADD UNIQUE KEY uk_user_notification (user_id, notification_id)"
+        );
+      } catch (e) {
+        // Игнорируем, если ключ уже существует
+      }
     }
 
     // Токены восстановления пароля
@@ -1217,7 +1247,7 @@ app.get("/api/notifications", authenticate, async (req, res) => {
         n.level,
         n.target_role,
         n.created_at,
-        CASE WHEN nr.id IS NULL THEN 0 ELSE 1 END AS is_read
+        CASE WHEN nr.notification_id IS NULL THEN 0 ELSE 1 END AS is_read
       FROM notifications n
       LEFT JOIN notification_reads nr
         ON nr.notification_id = n.id
@@ -2904,25 +2934,48 @@ app.get("/api/variants", authenticate, async (req, res) => {
     }
 
     const whereSql = whereParts.join(" AND ");
+    // Отдаём сразу фото и характеристики карточки: раньше интерфейс догружал их
+    // отдельным запросом /api/properties, который тянул всю базу целиком.
     const [rows] = await connection.execute(
-      `SELECT p.id, p.price, p.mkv, p.status, p.address, p.created_at
-       , p.curator_id
+      `SELECT p.id, p.price, p.unit, p.mkv, p.status, p.address, p.created_at,
+              p.curator_id, p.type_id, p.rooms, p.etaj, p.etajnost, p.photos,
+              CONCAT(u.first_name, ' ', u.last_name) AS curator_name
        FROM properties p
+       LEFT JOIN users1 u ON p.curator_id = u.id
        WHERE ${whereSql}
        ORDER BY p.created_at DESC, p.id DESC`,
       params
     );
 
-    const variants = rows.map((row) => ({
-      id: row.id,
-      date: new Date(row.created_at).toLocaleDateString("ru-RU"),
-      time: new Date(row.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
-      area: row.mkv,
-      district: row.address,
-      price: row.price,
-      status: row.status,
-      curator_id: row.curator_id ?? null,
-    }));
+    const variants = rows.map((row) => {
+      let parsedPhotos = [];
+      if (row.photos) {
+        try {
+          parsedPhotos = JSON.parse(row.photos) || [];
+        } catch (e) {
+          console.warn(`Error parsing photos for variant ${row.id}:`, e.message);
+          parsedPhotos = [];
+        }
+      }
+
+      return {
+        id: row.id,
+        date: new Date(row.created_at).toLocaleDateString("ru-RU"),
+        time: new Date(row.created_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+        area: row.mkv,
+        district: row.address,
+        price: row.price,
+        unit: row.unit || null,
+        status: row.status,
+        curator_id: row.curator_id ?? null,
+        curator_name: row.curator_name || null,
+        type_id: row.type_id || null,
+        rooms: row.rooms || null,
+        etaj: row.etaj || null,
+        etajnost: row.etajnost || null,
+        photos: parsedPhotos.map((img) => `https://s3.twcstorage.ru/${bucketName}/${img}`),
+      };
+    });
 
     res.json(variants);
   } catch (error) {
@@ -3845,10 +3898,29 @@ app.patch("/api/properties/redirect", authenticate, async (req, res) => {
 app.use((err, req, res, next) => {
   console.error("Global error:", {
     message: err.message,
+    code: err.code,
     stack: err.stack,
     path: req.path,
     method: req.method
   });
+
+  // Ошибки загрузки файлов — вина запроса, а не сервера.
+  // Раньше они уходили как 500 «Внутренняя ошибка сервера», и в интерфейсе
+  // добавление объекта выглядело как необъяснимый сбой.
+  if (err instanceof multer.MulterError) {
+    const messages = {
+      LIMIT_FILE_SIZE: "Файл слишком большой: максимум 100 МБ на изображение",
+      LIMIT_FILE_COUNT: "Слишком много файлов",
+      LIMIT_UNEXPECTED_FILE: `Неожиданное поле файла: ${err.field}`,
+    };
+    return res.status(400).json({ error: messages[err.code] || `Ошибка загрузки файла: ${err.message}` });
+  }
+
+  const status = Number(err.status) || 500;
+  if (status < 500) {
+    return res.status(status).json({ error: err.message });
+  }
+
   res.status(500).json({ error: `Внутренняя ошибка сервера: ${err.message}` });
 });
 
