@@ -2939,6 +2939,7 @@ app.get("/api/variants", authenticate, async (req, res) => {
     const [rows] = await connection.execute(
       `SELECT p.id, p.price, p.unit, p.mkv, p.status, p.address, p.created_at,
               p.curator_id, p.type_id, p.rooms, p.etaj, p.etajnost, p.photos,
+              p.owner_name, p.owner_phone,
               CONCAT(u.first_name, ' ', u.last_name) AS curator_name
        FROM properties p
        LEFT JOIN users1 u ON p.curator_id = u.id
@@ -2967,6 +2968,8 @@ app.get("/api/variants", authenticate, async (req, res) => {
         price: row.price,
         unit: row.unit || null,
         status: row.status,
+        owner_name: row.owner_name || null,
+        owner_phone: row.owner_phone || null,
         curator_id: row.curator_id ?? null,
         curator_name: row.curator_name || null,
         type_id: row.type_id || null,
