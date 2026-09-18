@@ -13,7 +13,7 @@ require("dotenv").config();
 
 const app = express();
 const port = process.env.PORT || 5000;
-const publicDomain = process.env.PUBLIC_DOMAIN || "https://itwebkg-nowa001-b8a4.twc1.net";
+const publicDomain = process.env.PUBLIC_DOMAIN || "https://itwebkg-nowa001-8306.twc1.net";
 const jwtSecret = process.env.JWT_SECRET || "your_jwt_secret_123";
 
 // Valid roles for validation22
